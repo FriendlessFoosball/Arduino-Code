@@ -12,8 +12,8 @@
 #define MOTOR_Z_STEP_PIN 4
 #define MOTOR_Z_DIR_PIN 7
 #define MOTOR_A_ENABLE_PIN 8
-#define MOTOR_A_STEP_PIN 41
-#define MOTOR_A_DIR_PIN 42
+#define MOTOR_A_STEP_PIN 12
+#define MOTOR_A_DIR_PIN 13
 #define NUM_MOTORS 4
 
 // initialize motor array
@@ -30,6 +30,8 @@ int sendIndex = 0;
 bool dataReady = false;
 bool positionControl[NUM_MOTORS] = {true, true, true, true};
 long zeroPositions[NUM_MOTORS] = {0, 0, 0, 0};
+
+
 
 void setup()
 {
@@ -52,6 +54,7 @@ void setup()
 
 void loop()
 {
+  
   if(dataReady) // if we have received a full command
   {
     // get 4-bit motor address and command
@@ -79,7 +82,7 @@ void loop()
       case 0x03: // set position
       {
         (*motors[motor]).moveTo( (float)(short)((((unsigned short)serialBuffer[1]) << 8) | (unsigned short)serialBuffer[2]) );
-        positionControl[motor] = true;
+        positionControl[motor] = true; 
         break;
       }
       case 0x04: // get position
