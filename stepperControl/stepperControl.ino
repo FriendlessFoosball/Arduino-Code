@@ -19,7 +19,8 @@ AccelStepper motor_Y(1, MOTOR_Y_STEP_PIN, MOTOR_Y_DIR_PIN);
 AccelStepper motor_Z(1, MOTOR_Z_STEP_PIN, MOTOR_Z_DIR_PIN);
 AccelStepper *motors[NUM_MOTORS] = {&motor_X, &motor_Y, &motor_Z};
 
-unsigned char serialBuffer[10];
+unsigned char serialBuffer[4];
+unsigned char sendBuffer[2];
 int bufferIndex = 0;
 bool dataReady = false;
 bool positionControl[4] = {true, true, true, true};
@@ -36,7 +37,7 @@ void setup()
     (*motors[i]).setPinsInverted(false, false, true);
     (*motors[i]).setAcceleration(800000);  
     (*motors[i]).setMaxSpeed(8000);
-    (*motors[i]).moveTo(1600);
+    (*motors[i]).moveTo(0);
     (*motors[i]).enableOutputs();
   }
 }
@@ -67,6 +68,19 @@ void loop()
         positionControl[motor] = false;
         break;
       }
+      case 0x03: // set position
+      {
+        (*motors[motor]).moveTo( (float)(short)((((unsigned short)serialBuffer[1]) << 8) | (unsigned short)serialBuffer[2]) );
+        positionControl[motor] = true;
+        break;
+      }
+      case 0x04: // get position
+      {
+        long currPos = (*motors[motor]).currentPosition();
+        sendBuffer[0] = (unsigned char)(char)((currPos & 0xFF00) >> 8);
+        sendBuffer[1] = (unsigned char)(char)(currPos & 0xFF);
+        break;
+      }
       default: SerialUSB.println("aahhhhhh"); break;
     }
     dataReady = false;
@@ -87,6 +101,7 @@ void loop()
   
   // call SerialEvent manually because Arduino Due firmware is awful
   if (SerialUSB.available()) serialEvent();
+  if (SerialUSB.availableForWrite()) serialWrite();
 }
 
 // "interrupt" for serial data receiving between iterations of loop()
@@ -98,5 +113,11 @@ void serialEvent() {
       dataReady = true;
     }
     bufferIndex++;
+  }
+}
+
+void serialWrite() {
+  while (SerialUSB.availableForWrite()) {
+    SerialUSB.write();
   }
 }
