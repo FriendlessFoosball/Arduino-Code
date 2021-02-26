@@ -22,8 +22,9 @@ AccelStepper *motors[NUM_MOTORS] = {&motor_X, &motor_Y, &motor_Z};
 unsigned char serialBuffer[4];
 unsigned char sendBuffer[2];
 int bufferIndex = 0;
+int sendIndex = 0;
 bool dataReady = false;
-bool positionControl[4] = {true, true, true, true};
+bool positionControl[NUM_MOTORS] = {true, true, true};
 long zeroPositions[NUM_MOTORS] = {0, 0, 0};
 
 void setup()
@@ -79,6 +80,7 @@ void loop()
         long currPos = (*motors[motor]).currentPosition();
         sendBuffer[0] = (unsigned char)(char)((currPos & 0xFF00) >> 8);
         sendBuffer[1] = (unsigned char)(char)(currPos & 0xFF);
+        sendIndex = 0;
         break;
       }
       default: SerialUSB.println("aahhhhhh"); break;
@@ -101,7 +103,7 @@ void loop()
   
   // call SerialEvent manually because Arduino Due firmware is awful
   if (SerialUSB.available()) serialEvent();
-  if (SerialUSB.availableForWrite()) serialWrite();
+  if (SerialUSB.availableForWrite() && sendIndex < 2) serialWrite();
 }
 
 // "interrupt" for serial data receiving between iterations of loop()
@@ -117,7 +119,8 @@ void serialEvent() {
 }
 
 void serialWrite() {
-  while (SerialUSB.availableForWrite()) {
-    SerialUSB.write();
+  while (SerialUSB.availableForWrite() && sendIndex < 2) {
+    SerialUSB.write(sendBuffer[sendIndex]);
+    sendIndex++;
   }
 }
