@@ -11,28 +11,35 @@
 #define MOTOR_Z_ENABLE_PIN 8
 #define MOTOR_Z_STEP_PIN 4
 #define MOTOR_Z_DIR_PIN 7
+#define MOTOR_A_ENABLE_PIN 8
+#define MOTOR_A_STEP_PIN 41
+#define MOTOR_A_DIR_PIN 42
+#define NUM_MOTORS 4
 
-#define NUM_MOTORS 3
-
+// initialize motor array
 AccelStepper motor_X(1, MOTOR_X_STEP_PIN, MOTOR_X_DIR_PIN);
 AccelStepper motor_Y(1, MOTOR_Y_STEP_PIN, MOTOR_Y_DIR_PIN);
 AccelStepper motor_Z(1, MOTOR_Z_STEP_PIN, MOTOR_Z_DIR_PIN);
-AccelStepper *motors[NUM_MOTORS] = {&motor_X, &motor_Y, &motor_Z};
+AccelStepper motor_A(1, MOTOR_A_STEP_PIN, MOTOR_A_DIR_PIN);
+AccelStepper *motors[NUM_MOTORS] = {&motor_X, &motor_Y, &motor_Z, &motor_A};
 
 unsigned char serialBuffer[4];
 unsigned char sendBuffer[2];
 int bufferIndex = 0;
 int sendIndex = 0;
 bool dataReady = false;
-bool positionControl[NUM_MOTORS] = {true, true, true};
-long zeroPositions[NUM_MOTORS] = {0, 0, 0};
+bool positionControl[NUM_MOTORS] = {true, true, true, true};
+long zeroPositions[NUM_MOTORS] = {0, 0, 0, 0};
 
 void setup()
 {
   SerialUSB.begin(1843200);
+
+  // initialize motors
   (*motors[0]).setEnablePin(MOTOR_X_ENABLE_PIN);
   (*motors[1]).setEnablePin(MOTOR_Y_ENABLE_PIN);
   (*motors[2]).setEnablePin(MOTOR_Z_ENABLE_PIN);
+  (*motors[3]).setEnablePin(MOTOR_A_ENABLE_PIN);
   for(int i=0; i < NUM_MOTORS; i++)
   {
     (*motors[i]).setPinsInverted(false, false, true);
@@ -45,7 +52,7 @@ void setup()
 
 void loop()
 {
-  if(dataReady)
+  if(dataReady) // if we have received a full command
   {
     // get 4-bit motor address and command
     unsigned char motor = serialBuffer[0] & 0x03;
@@ -83,12 +90,19 @@ void loop()
         sendIndex = 0;
         break;
       }
-      default: SerialUSB.println("aahhhhhh"); break;
+      default: // invalid command
+      {
+        sendBuffer[0] = 0xFF;
+        sendBuffer[1] = 0xFF;
+        sendIndex = 0;
+        break;
+      }
     }
     dataReady = false;
     bufferIndex = 0;
   }
 
+  // for each motor, update either speed or position control
   for(int i=0; i < NUM_MOTORS; i++)
   {
     if(positionControl[i])
@@ -103,6 +117,7 @@ void loop()
   
   // call SerialEvent manually because Arduino Due firmware is awful
   if (SerialUSB.available()) serialEvent();
+  // call our writing function one byte at a time to prevent blocking
   if (SerialUSB.availableForWrite() && sendIndex < 2) serialWrite();
 }
 
