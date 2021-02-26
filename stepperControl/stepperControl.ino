@@ -22,6 +22,8 @@ AccelStepper *motors[NUM_MOTORS] = {&motor_X, &motor_Y, &motor_Z};
 unsigned char serialBuffer[10];
 int bufferIndex = 0;
 bool dataReady = false;
+bool positionControl[4] = {true, true, true, true};
+long zeroPositions[NUM_MOTORS] = {0, 0, 0};
 
 void setup()
 {
@@ -49,11 +51,20 @@ void loop()
 
     switch(command)
     {
-      case 0x00: 
+      case 0x00: // zero motor
       {
-        SerialUSB.print("home motor ");
-        SerialUSB.println(motor);
-        (*motors[motor]).moveTo(0);
+        (*motors[motor]).moveTo(zeroPositions[motor]);
+        break;
+      }
+      case 0x01: // set zero position
+      {
+        zeroPositions[motor] = (*motors[motor]).currentPosition();
+        break;
+      }
+      case 0x02: // set speed
+      {
+        (*motors[motor]).setSpeed( (float)(short)((((unsigned short)serialBuffer[1]) << 8) | (unsigned short)serialBuffer[2]) );
+        positionControl[motor] = false;
         break;
       }
       default: SerialUSB.println("aahhhhhh"); break;
@@ -62,7 +73,17 @@ void loop()
     bufferIndex = 0;
   }
 
-  for(int i=0; i < NUM_MOTORS; i++) (*motors[i]).run();
+  for(int i=0; i < NUM_MOTORS; i++)
+  {
+    if(positionControl[i])
+    {
+      (*motors[i]).run();
+    }
+    else
+    {
+      (*motors[i]).runSpeed();
+    }
+  }
   
   // call SerialEvent manually because Arduino Due firmware is awful
   if (SerialUSB.available()) serialEvent();
