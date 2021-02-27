@@ -23,15 +23,14 @@ AccelStepper motor_Z(1, MOTOR_Z_STEP_PIN, MOTOR_Z_DIR_PIN);
 AccelStepper motor_A(1, MOTOR_A_STEP_PIN, MOTOR_A_DIR_PIN);
 AccelStepper *motors[NUM_MOTORS] = {&motor_X, &motor_Y, &motor_Z, &motor_A};
 
-unsigned char serialBuffer[4];
-unsigned char sendBuffer[2];
+unsigned char serialBuffer[10];
+unsigned char sendBuffer[8];
 int bufferIndex = 0;
 int sendIndex = 0;
+int sendMax = 0;
 bool dataReady = false;
 bool positionControl[NUM_MOTORS] = {true, true, true, true};
 long zeroPositions[NUM_MOTORS] = {0, 0, 0, 0};
-
-
 
 void setup()
 {
@@ -91,6 +90,49 @@ void loop()
         sendBuffer[0] = (unsigned char)(char)((currPos & 0xFF00) >> 8);
         sendBuffer[1] = (unsigned char)(char)(currPos & 0xFF);
         sendIndex = 0;
+        sendMax = 2;
+        break;
+      }
+      case 0x05: // set all positions
+      {
+        (*motors[0]).moveTo( (float)(short)((((unsigned short)serialBuffer[1]) << 8) | (unsigned short)serialBuffer[2]) );
+        (*motors[1]).moveTo( (float)(short)((((unsigned short)serialBuffer[3]) << 8) | (unsigned short)serialBuffer[4]) );
+        (*motors[2]).moveTo( (float)(short)((((unsigned short)serialBuffer[5]) << 8) | (unsigned short)serialBuffer[6]) );
+        (*motors[3]).moveTo( (float)(short)((((unsigned short)serialBuffer[7]) << 8) | (unsigned short)serialBuffer[8]) );
+        positionControl[0] = true; 
+        positionControl[1] = true; 
+        positionControl[2] = true; 
+        positionControl[3] = true; 
+        break;
+      }
+      case 0x06: // set all speeds
+      {
+        (*motors[0]).setSpeed( (float)(short)((((unsigned short)serialBuffer[1]) << 8) | (unsigned short)serialBuffer[2]) );
+        (*motors[1]).setSpeed( (float)(short)((((unsigned short)serialBuffer[3]) << 8) | (unsigned short)serialBuffer[4]) );
+        (*motors[2]).setSpeed( (float)(short)((((unsigned short)serialBuffer[5]) << 8) | (unsigned short)serialBuffer[6]) );
+        (*motors[3]).setSpeed( (float)(short)((((unsigned short)serialBuffer[7]) << 8) | (unsigned short)serialBuffer[8]) );
+        positionControl[0] = false;
+        positionControl[1] = false;
+        positionControl[2] = false;
+        positionControl[3] = false;
+        break;
+      }
+      case 0x07: // get all positions
+      {
+        long currPos = (*motors[0]).currentPosition();
+        sendBuffer[0] = (unsigned char)(char)((currPos & 0xFF00) >> 8);
+        sendBuffer[1] = (unsigned char)(char)(currPos & 0xFF);
+        currPos = (*motors[1]).currentPosition();
+        sendBuffer[2] = (unsigned char)(char)((currPos & 0xFF00) >> 8);
+        sendBuffer[3] = (unsigned char)(char)(currPos & 0xFF);
+        currPos = (*motors[2]).currentPosition();
+        sendBuffer[4] = (unsigned char)(char)((currPos & 0xFF00) >> 8);
+        sendBuffer[5] = (unsigned char)(char)(currPos & 0xFF);
+        currPos = (*motors[3]).currentPosition();
+        sendBuffer[6] = (unsigned char)(char)((currPos & 0xFF00) >> 8);
+        sendBuffer[7] = (unsigned char)(char)(currPos & 0xFF);
+        sendIndex = 0;
+        sendMax = 8;
         break;
       }
       default: // invalid command
@@ -121,7 +163,7 @@ void loop()
   // call SerialEvent manually because Arduino Due firmware is awful
   if (SerialUSB.available()) serialEvent();
   // call our writing function one byte at a time to prevent blocking
-  if (SerialUSB.availableForWrite() && sendIndex < 2) serialWrite();
+  if (SerialUSB.availableForWrite() && sendIndex < sendMax) serialWrite();
 }
 
 // "interrupt" for serial data receiving between iterations of loop()
@@ -137,7 +179,7 @@ void serialEvent() {
 }
 
 void serialWrite() {
-  while (SerialUSB.availableForWrite() && sendIndex < 2) {
+  while (SerialUSB.availableForWrite() && sendIndex < sendMax) {
     SerialUSB.write(sendBuffer[sendIndex]);
     sendIndex++;
   }
