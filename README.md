@@ -7,9 +7,16 @@ Commands are sent over USB Serial.  The first byte of a command determines which
  - 000010: set speed
  - 000011: set position
  - 000100: get position
+ - 000101: set all positions
+ - 000110: set all speeds
+ - 000111: get all positions
 
 If set speed or set position is sent, the Arduino expects the next 2 bytes to be the speed/position in 8-bit signed integer format.  The least significant byte should be sent first.
 
+If set all speeds or set all positions is sent, the Arduino expects the next 8 bytes to be the speed/position in 8-bit signed integer format for each motor in order: X, Y, Z, A.  The least significant byte should be sent first.
+
 If get position is received by the Arduino, it will reply with 2 bytes corresponding to the position as an 8-bit signed integer value.  The least significant byte is sent first.
+
+If get all positions is received by the Arduino, it will reply with 8 bytes corresponding to the position as an 8-bit signed integer value for each motor in order: X, Y, Z, A.  The least significant byte is sent first.
 
 Any transmission must be terminated with a newline (0x0A) to tell the Arduino that the transmission is complete.
