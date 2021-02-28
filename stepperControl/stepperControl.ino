@@ -5,9 +5,13 @@
 #define MOTOR_X_ENABLE_PIN 8
 #define MOTOR_X_STEP_PIN 2
 #define MOTOR_X_DIR_PIN 5
+#define MOTOR_X_LOWER_LIMIT_PIN 51
+#define MOTOR_X_UPPER_LIMIT_PIN 50
 #define MOTOR_Y_ENABLE_PIN 8
 #define MOTOR_Y_STEP_PIN 3
 #define MOTOR_Y_DIR_PIN 6
+#define MOTOR_Y_LOWER_LIMIT_PIN 53
+#define MOTOR_Y_UPPER_LIMIT_PIN 52
 #define MOTOR_Z_ENABLE_PIN 8
 #define MOTOR_Z_STEP_PIN 4
 #define MOTOR_Z_DIR_PIN 7
@@ -30,11 +34,17 @@ int sendIndex = 0;
 int sendMax = 0;
 bool dataReady = false;
 bool positionControl[NUM_MOTORS] = {true, true, true, true};
-long zeroPositions[NUM_MOTORS] = {0, 0, 0, 0};
+short zeroPositions[NUM_MOTORS] = {0, 0, 0, 0};
+bool movingForward[NUM_MOTORS] = {true, true, true, true};
 
 void setup()
 {
   SerialUSB.begin(1843200);
+
+  pinMode(MOTOR_X_LOWER_LIMIT_PIN, INPUT);
+  pinMode(MOTOR_Y_LOWER_LIMIT_PIN, INPUT);
+  pinMode(MOTOR_X_UPPER_LIMIT_PIN, INPUT);
+  pinMode(MOTOR_Y_UPPER_LIMIT_PIN, INPUT);
 
   // initialize motors
   (*motors[0]).setEnablePin(MOTOR_X_ENABLE_PIN);
@@ -53,7 +63,6 @@ void setup()
 
 void loop()
 {
-  
   if(dataReady) // if we have received a full command
   {
     // get 4-bit motor address and command
@@ -76,12 +85,16 @@ void loop()
       {
         (*motors[motor]).setSpeed( (float)(short)((((unsigned short)serialBuffer[1]) << 8) | (unsigned short)serialBuffer[2]) );
         positionControl[motor] = false;
+        if((*motors[motor]).speed() >= 0) movingForward[motor] = true;
+        else movingForward[motor] = false;
         break;
       }
       case 0x03: // set position
       {
-        (*motors[motor]).moveTo( (float)(short)((((unsigned short)serialBuffer[1]) << 8) | (unsigned short)serialBuffer[2]) );
+        (*motors[motor]).moveTo( (float)(short)(((((unsigned short)serialBuffer[1]) << 8) | (unsigned short)serialBuffer[2])+zeroPositions[motor]) );
         positionControl[motor] = true; 
+        if((*motors[motor]).distanceToGo() > 0) movingForward[motor] = true;
+        else movingForward[motor] = false;
         break;
       }
       case 0x04: // get position
@@ -95,14 +108,16 @@ void loop()
       }
       case 0x05: // set all positions
       {
-        (*motors[0]).moveTo( (float)(short)((((unsigned short)serialBuffer[1]) << 8) | (unsigned short)serialBuffer[2]) );
-        (*motors[1]).moveTo( (float)(short)((((unsigned short)serialBuffer[3]) << 8) | (unsigned short)serialBuffer[4]) );
-        (*motors[2]).moveTo( (float)(short)((((unsigned short)serialBuffer[5]) << 8) | (unsigned short)serialBuffer[6]) );
-        (*motors[3]).moveTo( (float)(short)((((unsigned short)serialBuffer[7]) << 8) | (unsigned short)serialBuffer[8]) );
-        positionControl[0] = true; 
-        positionControl[1] = true; 
-        positionControl[2] = true; 
-        positionControl[3] = true; 
+        (*motors[0]).moveTo( (float)(short)(((((unsigned short)serialBuffer[1]) << 8) | (unsigned short)serialBuffer[2])+zeroPositions[0]) );
+        (*motors[1]).moveTo( (float)(short)(((((unsigned short)serialBuffer[3]) << 8) | (unsigned short)serialBuffer[4])+zeroPositions[1]) );
+        (*motors[2]).moveTo( (float)(short)(((((unsigned short)serialBuffer[5]) << 8) | (unsigned short)serialBuffer[6])+zeroPositions[2]) );
+        (*motors[3]).moveTo( (float)(short)(((((unsigned short)serialBuffer[7]) << 8) | (unsigned short)serialBuffer[8])+zeroPositions[3]) );
+        for(int i=0; i < NUM_MOTORS; i++)
+        {
+          positionControl[i] = true; 
+          if((*motors[motor]).distanceToGo() > 0) movingForward[i] = true;
+          else movingForward[i] = false;
+        }
         break;
       }
       case 0x06: // set all speeds
@@ -111,24 +126,26 @@ void loop()
         (*motors[1]).setSpeed( (float)(short)((((unsigned short)serialBuffer[3]) << 8) | (unsigned short)serialBuffer[4]) );
         (*motors[2]).setSpeed( (float)(short)((((unsigned short)serialBuffer[5]) << 8) | (unsigned short)serialBuffer[6]) );
         (*motors[3]).setSpeed( (float)(short)((((unsigned short)serialBuffer[7]) << 8) | (unsigned short)serialBuffer[8]) );
-        positionControl[0] = false;
-        positionControl[1] = false;
-        positionControl[2] = false;
-        positionControl[3] = false;
+        for(int i = 0; i < NUM_MOTORS; i++)
+        {
+          positionControl[i] = false;
+          if((*motors[i]).speed() >= 0) movingForward[i] = true;
+          else movingForward[i] = false;
+        }
         break;
       }
       case 0x07: // get all positions
       {
-        long currPos = (*motors[0]).currentPosition();
+        long currPos = (*motors[0]).currentPosition() + zeroPositions[0];
         sendBuffer[0] = (unsigned char)(char)((currPos & 0xFF00) >> 8);
         sendBuffer[1] = (unsigned char)(char)(currPos & 0xFF);
-        currPos = (*motors[1]).currentPosition();
+        currPos = (*motors[1]).currentPosition() + zeroPositions[1];
         sendBuffer[2] = (unsigned char)(char)((currPos & 0xFF00) >> 8);
         sendBuffer[3] = (unsigned char)(char)(currPos & 0xFF);
-        currPos = (*motors[2]).currentPosition();
+        currPos = (*motors[2]).currentPosition() + zeroPositions[2];
         sendBuffer[4] = (unsigned char)(char)((currPos & 0xFF00) >> 8);
         sendBuffer[5] = (unsigned char)(char)(currPos & 0xFF);
-        currPos = (*motors[3]).currentPosition();
+        currPos = (*motors[3]).currentPosition() + zeroPositions[3];
         sendBuffer[6] = (unsigned char)(char)((currPos & 0xFF00) >> 8);
         sendBuffer[7] = (unsigned char)(char)(currPos & 0xFF);
         sendIndex = 0;
@@ -150,13 +167,21 @@ void loop()
   // for each motor, update either speed or position control
   for(int i=0; i < NUM_MOTORS; i++)
   {
-    if(positionControl[i])
+    // only send a tick if we are not hitting a limit switch (only for X and Y)
+    bool limitHit = true;
+    if(i > 1) limitHit = false;
+    else if(i == 0 && ((movingForward[i] & digitalRead(MOTOR_X_UPPER_LIMIT_PIN)) || (!movingForward[i] & digitalRead(MOTOR_X_LOWER_LIMIT_PIN)))) limitHit = false;
+    else if(i == 1 && ((movingForward[i] & digitalRead(MOTOR_Y_UPPER_LIMIT_PIN)) || (!movingForward[i] & digitalRead(MOTOR_Y_LOWER_LIMIT_PIN)))) limitHit = false;
+    if(!limitHit)
     {
-      (*motors[i]).run();
-    }
-    else
-    {
-      (*motors[i]).runSpeed();
+      if(positionControl[i])
+      {
+        (*motors[i]).run();
+      }
+      else
+      {
+        (*motors[i]).runSpeed();
+      }
     }
   }
   
